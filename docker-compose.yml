@@ -1,0 +1,89 @@
+x-common-labels: &common-labels
+  auth-react.project: "auth-react-js"
+  auth-react.contact: "goncharrov@yahoo.com"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: auth-react-db
+    environment:
+      POSTGRES_DB: myapp
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Внешний порт не мапим, БД доступна только внутри docker-сети
+    # Если нужен доступ с хоста – раскомментируйте и поменяйте левую часть, например "5433:5432"
+    # ports:
+    #   - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: auth-react-server
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 5005
+      NODE_ENV: production
+      # Используем hostname/container_name Postgres-контейнера
+      DB_HOST: auth-react-db
+      DB_PORT: 5432
+      DB_NAME: myapp
+      DB_USER: postgres
+      DB_PASSWORD: password123
+      SESSION_SECRET: supersecret
+      COOKIE_SECURE: "false"
+      # Origin, с которого ходит фронт (включая порт!) для CORS/credentials
+      # Сейчас фронт открыт по http://127.0.0.1:8008, поэтому указываем именно его
+      CLIENT_URL: http://127.0.0.1:8008
+    ports:
+      - "5005:5005"
+    command: >
+      sh -c "npx sequelize-cli db:migrate && node index.js"  
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5005/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: auth-react-client
+    depends_on:
+      - server
+    ports:
+      # Внутри контейнера Nginx слушает 80, наружу пробрасываем, например, на 8008
+      - "8008:80"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8008/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - app-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge

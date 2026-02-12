@@ -1,0 +1,17 @@
+{
+  "development": {
+    "username": "yummy",
+    "password": "321",
+    "database": "auth_react",
+    "host": "127.0.0.1",
+    "dialect": "postgres"
+  },
+  "production": {
+    "username": "postgres",
+    "password": "password123",
+    "database": "myapp",
+    "host": "auth-react-db",
+    "port": 5432,
+    "dialect": "postgres"
+  }
+}
